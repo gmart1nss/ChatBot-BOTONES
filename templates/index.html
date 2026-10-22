@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<!--
+  index.html - Pagina de chat do Botones (assistente de presets do Amplitube 5).
+
+  Interface seguindo a especificacao visual: tema preto fosco, vermelho
+  pontual como acento, logotipo gotico ("botones"), cabecalho fino, area
+  central de boas-vindas com tres sugestoes rapidas e uma barra de mensagem
+  longa e arredondada na parte inferior. Ilustracoes monocromaticas de
+  amplificador (canto inferior esquerdo) e guitarra (lateral direita) ficam
+  ao fundo, com baixa opacidade.
+
+  Sem assets externos alem das fontes do Google Fonts (blackletter para a
+  marca, sans-serif para a interface). Toda a logica de conversa esta no
+  <script> ao final; a area central vira o historico apos a conversa comecar.
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>botones - presets e simulacoes para guitarristas no Amplitube 5</title>
+
+  <!-- Fontes: UnifrakturCook (blackletter, so na marca) e Inter (interface). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=UnifrakturCook:wght@700&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    /* ---------------------------------------------------------------
+       Paleta (secao 2 da especificacao). Tons escuros predominantes,
+       vermelho pontual como acento e branco acinzentado nos textos.
+       --------------------------------------------------------------- */
+    :root {
+      --fundo-principal: #080808;   /* fundo geral */
+      --fundo-secundario: #101010;  /* superficies, variacoes */
+      --superficie: #151515;        /* campo de mensagem, estados */
+      --borda: #303030;             /* contornos discretos */
+      --borda-cabecalho: #292929;   /* linha sob o cabecalho */
+      --vermelho: #e02020;          /* acento principal */
+      --vermelho-escuro: #571515;   /* fundo do botao de envio */
+      --vermelho-hover: #762020;    /* hover do botao de envio */
+      --branco: #e6e6e6;            /* titulos e marca */
+      --texto-2: #b8b8b8;           /* texto secundario */
+      --texto-3: #777777;           /* placeholders, terciario */
+      --texto-boas-vindas: #d0d0d0; /* mensagem de boas-vindas */
+      --texto-descricao: #858585;   /* descricao no cabecalho */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background-color: var(--fundo-principal);
+      /* Textura fosca muito sutil: granulacao fina via SVG embutido, sem
+         gradientes coloridos nem neon. Variacoes quase imperceptiveis. */
+      background-image:
+        radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.015), transparent 60%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      color: var(--branco);
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ---------------------------------------------------------------
+       Ilustracoes decorativas de fundo (secao 3). Monocromaticas, linhas
+       finas, baixa opacidade, atras de todo o conteudo funcional.
+       --------------------------------------------------------------- */
+    .decoracao {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .decoracao .amp {
+      position: absolute;
+      left: -40px;
+      bottom: -30px;
+      width: 420px;
+      height: auto;
+      opacity: 0.16;
+    }
+
+    .decoracao .guitarra {
+      position: absolute;
+      right: -80px;
+      top: 90px;
+      width: 460px;
+      height: auto;
+      opacity: 0.14;
+    }
+
+    /* ---------------------------------------------------------------
+       Cabecalho (secao 4): faixa fina com logo a esquerda, descricao e
+       engrenagem a direita. Separado por linha fina #292929.
+       --------------------------------------------------------------- */
+    .cabecalho {
+      position: relative;
+      z-index: 2;
+      height: 75px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 40px;
+      border-bottom: 1px solid var(--borda-cabecalho);
+      background-color: var(--fundo-principal);
+    }
+
+    .cabecalho-marca {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Simbolo de onda sonora / equalizador: cinco barras vermelhas
+       arredondadas, as maiores proximas ao centro. */
+    .onda {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .onda span {
+      display: block;
+      width: 4px;
+      border-radius: 3px;
+      background-color: var(--vermelho);
+    }
+
+    /* Alturas diferentes, pico no centro (cabecalho ~40px de altura). */
+    .cabecalho .onda { height: 40px; }
+    .cabecalho .onda span:nth-child(1) { height: 16px; }
+    .cabecalho .onda span:nth-child(2) { height: 28px; }
+    .cabecalho .onda span:nth-child(3) { height: 40px; }
+    .cabecalho .onda span:nth-child(4) { height: 24px; }
+    .cabecalho .onda span:nth-child(5) { height: 13px; }
+
+    .marca-nome {
+      font-family: "UnifrakturCook", serif;
+      font-weight: 700;
+      color: var(--branco);
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .separador-vertical {
+      width: 1px;
+      height: 35px;
+      background-color: var(--borda);
+      margin: 0 22px;
+    }
+
+    .descricao {
+      color: var(--texto-descricao);
+      font-size: 12px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      line-height: 18px;
+      font-weight: 400;
+    }
+
+    .engrenagem {
+      margin-left: auto;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      color: var(--texto-2);
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .engrenagem svg { width: 22px; height: 22px; display: block; }
+    .engrenagem:hover { color: var(--branco); }
+
+    /* ---------------------------------------------------------------
+       Corpo: ocupa o espaco entre cabecalho e barra inferior. Contem a
+       area de boas-vindas (estado inicial) OU o historico (apos iniciar).
+       --------------------------------------------------------------- */
+    .corpo {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0 40px;
+    }
+
+    /* Area de boas-vindas centralizada (secao 5). */
+    .boas-vindas {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0;
+    }
+
+    /* Simbolo central (maior que o do cabecalho: ~65x55). */
+    .boas-vindas .onda { height: 55px; }
+    .boas-vindas .onda span { width: 6px; gap: 4px; }
+    .boas-vindas .onda span:nth-child(1) { height: 22px; }
+    .boas-vindas .onda span:nth-child(2) { height: 38px; }
+    .boas-vindas .onda span:nth-child(3) { height: 55px; }
+    .boas-vindas .onda span:nth-child(4) { height: 32px; }
+    .boas-vindas .onda span:nth-child(5) { height: 18px; }
+
+    .marca-central {
+      font-family: "UnifrakturCook", serif;
+      font-weight: 700;
+      color: var(--branco);
+      font-size: 60px;
+      line-height: 1;
+      margin-top: 10px;
+    }
+
+    .mensagem-boas-vindas {
+      color: var(--texto-boas-vindas);
+      font-size: 17px;
+      line-height: 29px;
+      font-weight: 400;
+      margin-top: 22px;
+      max-width: 620px;
+    }
+
+    /* Botoes de sugestoes rapidas (secao 6). */
+    .sugestoes {
+      display: flex;
+      gap: 16px;
+      margin-top: 40px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .sugestao {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 220px;
+      height: 60px;
+      padding: 0 20px;
+      background-color: var(--fundo-secundario);
+      border: 1px solid var(--borda);
+      border-radius: 30px;
+      color: var(--texto-boas-vindas);
+      font-family: inherit;
+      font-size: 12.5px;
+      line-height: 1.3;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 0.18s ease, border-color 0.18s ease;
+    }
+
+    .sugestao:hover {
+      background-color: #191919;
+      border-color: #454545;
+    }
+
+    .sugestao svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: #c8c8c8;
+    }
+
+    .sugestao span { white-space: pre-line; }
+
+    /* ---------------------------------------------------------------
+       Historico da conversa (reaproveita a area central apos iniciar).
+       Comeca escondido; o JS o exibe ao enviar a primeira mensagem.
+       --------------------------------------------------------------- */
+    .historico {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+      padding: 28px 0;
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .msg {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.5;
+      font-size: 15px;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+
+    .msg .autor {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+      opacity: 0.8;
+    }
+
+    .msg--voce {
+      align-self: flex-end;
+      background-color: var(--superficie);
+      border: 1px solid var(--borda);
+    }
+
+    .msg--voce .autor { color: var(--texto-2); }
+
+    .msg--botones {
+      align-self: flex-start;
+      background-color: var(--fundo-secundario);
+      border: 1px solid var(--borda);
+    }
+
+    .msg--botones .autor { color: var(--vermelho); }
+
+    .msg--erro {
+      align-self: center;
+      background-color: #1a0d0d;
+      border: 1px solid var(--vermelho-escuro);
+      color: #e9b8b8;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .historico::-webkit-scrollbar { width: 8px; }
+    .historico::-webkit-scrollbar-track { background: transparent; }
+    .historico::-webkit-scrollbar-thumb {
+      background: #2a2a2a;
+      border-radius: 6px;
+    }
+
+    /* ---------------------------------------------------------------
+       Barra de mensagem inferior (secao 7): longa, arredondada, com icone
+       de anexo a esquerda, textarea no meio e botao de envio vermelho.
+       --------------------------------------------------------------- */
+    .rodape {
+      position: relative;
+      z-index: 2;
+      flex-shrink: 0;
+      padding: 0 8.5% 5%;
+    }
+
+    .campo-mensagem {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 70px;
+      padding: 0 25px;
+      background-color: #111111;
+      border: 1px solid var(--borda);
+      border-radius: 36px;
+    }
+
+    .campo-mensagem:focus-within {
+      border-color: #454545;
+    }
+
+    .botao-anexo {
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      color: var(--texto-2);
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .botao-anexo svg { width: 23px; height: 23px; display: block; }
+    .botao-anexo:hover { color: var(--branco); }
+
+    #campo-texto {
+      flex: 1;
+      resize: none;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--branco);
+      font-family: inherit;
+      font-size: 15px;
+      line-height: 1.5;
+      max-height: 160px;
+      padding: 12px 0;
+    }
+
+    #campo-texto::placeholder { color: var(--texto-3); }
+
+    #botao-enviar {
+      flex-shrink: 0;
+      width: 62px;
+      height: 46px;
+      border: none;
+      border-radius: 24px;
+      background-color: var(--vermelho-escuro);
+      color: #f0f0f0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.18s ease;
+    }
+
+    #botao-enviar svg { width: 20px; height: 20px; }
+    #botao-enviar:hover { background-color: var(--vermelho-hover); }
+
+    #botao-enviar:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    /* ---------------------------------------------------------------
+       Responsividade (secao 11).
+       --------------------------------------------------------------- */
+    @media (max-width: 760px) {
+      .cabecalho { padding: 0 18px; }
+      .descricao, .separador-vertical { display: none; }
+      .corpo { padding: 0 18px; }
+      .marca-central { font-size: 44px; }
+      .mensagem-boas-vindas { font-size: 15px; }
+      .rodape { padding: 0 16px 20px; }
+      .decoracao .amp, .decoracao .guitarra { display: none; }
+      .sugestao { width: 100%; max-width: 320px; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Ilustracoes decorativas de fundo (amplificador + guitarra). -->
+  <div class="decoracao" aria-hidden="true">
+    <!-- Amplificador no canto inferior esquerdo, cortado pelas bordas. -->
+    <svg class="amp" viewBox="0 0 400 300" fill="none"
+         stroke="#5a5a5a" stroke-width="1.4" xmlns="http://www.w3.org/2000/svg">
+      <rect x="20" y="30" width="360" height="300" rx="8" />
+      <rect x="40" y="90" width="320" height="230" rx="6" />
+      <line x1="40" y1="70" x2="360" y2="70" />
+      <circle cx="70" cy="50" r="7" />
+      <circle cx="100" cy="50" r="7" />
+      <circle cx="130" cy="50" r="7" />
+      <circle cx="160" cy="50" r="7" />
+      <line x1="300" y1="50" x2="360" y2="50" />
+      <path d="M60 110 L340 110 M60 300 L340 300" opacity="0.6" />
+      <path d="M70 130 l260 160 M330 130 l-260 160" opacity="0.25" />
+    </svg>
+
+    <!-- Guitarra angular na lateral direita, corpo linear monocromatico. -->
+    <svg class="guitarra" viewBox="0 0 300 620" fill="none"
+         stroke="#5a5a5a" stroke-width="1.4" xmlns="http://www.w3.org/2000/svg">
+      <path d="M40 10 L70 10 L70 60 L55 70 L40 60 Z" />
+      <line x1="47" y1="12" x2="47" y2="58" />
+      <line x1="55" y1="12" x2="55" y2="62" />
+      <line x1="63" y1="12" x2="63" y2="58" />
+      <line x1="55" y1="70" x2="55" y2="360" />
+      <line x1="46" y1="70" x2="46" y2="355" />
+      <line x1="64" y1="70" x2="64" y2="355" />
+      <path d="M55 100 h0 M55 140 h0" />
+      <g opacity="0.7">
+        <line x1="44" y1="110" x2="66" y2="110" />
+        <line x1="44" y1="150" x2="66" y2="150" />
+        <line x1="44" y1="190" x2="66" y2="190" />
+        <line x1="44" y1="230" x2="66" y2="230" />
+        <line x1="44" y1="270" x2="66" y2="270" />
+        <line x1="44" y1="310" x2="66" y2="310" />
+      </g>
+      <path d="M55 360
+               L150 330 L240 380 L250 470 L200 560 L120 590
+               L40 560 L20 480 L30 410 Z" />
+      <rect x="110" y="420" width="50" height="22" rx="3" />
+      <rect x="110" y="460" width="50" height="22" rx="3" />
+      <line x1="90" y1="510" x2="200" y2="510" />
+      <circle cx="185" cy="540" r="8" />
+    </svg>
+  </div>
+
+  <!-- Cabecalho (secao 4). -->
+  <header class="cabecalho">
+    <div class="cabecalho-marca">
+      <span class="onda" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="marca-nome">botones</span>
+    </div>
+
+    <span class="separador-vertical" aria-hidden="true"></span>
+
+    <p class="descricao">PRESETS E SIMULAÇÕES PARA GUITARRISTAS<br />NO AMPLITUBE 5</p>
+
+    <button class="engrenagem" type="button" aria-label="Configurações" title="Configurações">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    </button>
+  </header>
+
+  <!-- Corpo: boas-vindas (estado inicial) + historico (apos iniciar). -->
+  <main class="corpo">
+    <section id="boas-vindas" class="boas-vindas">
+      <span class="onda" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <h1 class="marca-central">botones</h1>
+      <p class="mensagem-boas-vindas">Manda o que você quer — eu te ajudo a montar<br />o preset perfeito no AmpliTube 5.</p>
+
+      <div class="sugestoes">
+        <button class="sugestao" type="button" data-comando="Quero um preset para metal com high gain.">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M13 2 L4 14 h6 l-1 8 9-12 h-6 z" />
+          </svg>
+          <span>Preset para metal
+com high gain</span>
+        </button>
+
+        <button class="sugestao" type="button" data-comando="Quero simular um Marshall clássico.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <rect x="6" y="9" width="12" height="8" rx="1" />
+            <circle cx="7" cy="6.5" r="0.8" />
+            <circle cx="10" cy="6.5" r="0.8" />
+            <circle cx="13" cy="6.5" r="0.8" />
+          </svg>
+          <span>Simulação de um
+Marshall clássico</span>
+        </button>
+
+        <button class="sugestao" type="button" data-comando="Quero um timbre tipo Gojira, moderno e encorpado.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12 h3 l2 -6 l3 13 l3 -16 l3 15 l2 -6 h3" />
+          </svg>
+          <span>Timbre tipo Gojira
+(moderno e encorpado)</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Historico da conversa (escondido ate a primeira mensagem). -->
+    <section id="historico" class="historico" aria-live="polite" aria-label="Histórico da conversa"></section>
+  </main>
+
+  <!-- Barra de mensagem inferior (secao 7). -->
+  <footer class="rodape">
+    <div class="campo-mensagem">
+      <button class="botao-anexo" type="button" aria-label="Anexar arquivo" title="Anexar arquivo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.44 11.05 12.25 20.24a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49" />
+        </svg>
+      </button>
+
+      <textarea
+        id="campo-texto"
+        rows="1"
+        maxlength="4000"
+        placeholder="Digite sua mensagem..."
+        aria-label="Sua mensagem para o botones"
+      ></textarea>
+
+      <button id="botao-enviar" type="button" aria-label="Enviar mensagem" title="Enviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 2 L11 13" />
+          <path d="M22 2 L15 22 L11 13 L2 9 Z" />
+        </svg>
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    // =============================================================
+    // Logica de interacao e comunicacao com a rota /chat.
+    //  - A area central (#boas-vindas) some na primeira mensagem e da
+    //    lugar ao #historico.
+    //  - Envio por clique no botao e por Enter (Shift+Enter quebra linha).
+    //  - Botoes de sugestao preenchem o campo e focam nele.
+    //  - O servidor guarda o historico; aqui so renderizamos a conversa.
+    // =============================================================
+
+    var campoTexto = document.getElementById("campo-texto");
+    var botaoEnviar = document.getElementById("botao-enviar");
+    var historicoEl = document.getElementById("historico");
+    var boasVindasEl = document.getElementById("boas-vindas");
+
+    var enviando = false;
+    var conversaIniciada = false;
+
+    // Troca a tela de boas-vindas pelo historico na primeira mensagem.
+    function iniciarConversa() {
+      if (conversaIniciada) return;
+      conversaIniciada = true;
+      boasVindasEl.style.display = "none";
+      historicoEl.style.display = "flex";
+    }
+
+    function rolarParaFim() {
+      historicoEl.scrollTop = historicoEl.scrollHeight;
+    }
+
+    // Cria uma bolha de mensagem no historico. O texto entra via
+    // textContent (nunca innerHTML) para evitar injecao de HTML.
+    function renderizarBolha(tipo, autor, texto) {
+      var bolha = document.createElement("div");
+      bolha.className = "msg msg--" + tipo;
+
+      if (autor) {
+        var autorEl = document.createElement("span");
+        autorEl.className = "autor";
+        autorEl.textContent = autor;
+        bolha.appendChild(autorEl);
+      }
+
+      var textoEl = document.createElement("span");
+      textoEl.className = "texto";
+      textoEl.textContent = texto;
+      bolha.appendChild(textoEl);
+
+      historicoEl.appendChild(bolha);
+      rolarParaFim();
+    }
+
+    // Ajusta a altura do textarea conforme o conteudo (ate o max-height).
+    function ajustarAltura() {
+      campoTexto.style.height = "auto";
+      campoTexto.style.height = Math.min(campoTexto.scrollHeight, 160) + "px";
+    }
+
+    function definirEnviando(estaEnviando) {
+      enviando = estaEnviando;
+      botaoEnviar.disabled = estaEnviando;
+      campoTexto.disabled = estaEnviando;
+      if (!estaEnviando) campoTexto.focus();
+    }
+
+    async function enviarMensagem() {
+      if (enviando) return;
+
+      var texto = campoTexto.value;
+      if (!texto || texto.trim() === "") return;
+
+      var mensagem = texto.trim();
+
+      iniciarConversa();
+      renderizarBolha("voce", "Você", mensagem);
+
+      campoTexto.value = "";
+      ajustarAltura();
+      definirEnviando(true);
+
+      try {
+        var resposta = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: mensagem })
+        });
+
+        var dados = null;
+        try {
+          dados = await resposta.json();
+        } catch (erroJson) {
+          dados = null;
+        }
+
+        if (resposta.ok && dados && typeof dados.reply === "string" && dados.reply !== "") {
+          renderizarBolha("botones", "botones", dados.reply);
+        } else {
+          var mensagemErro =
+            dados && typeof dados.error === "string" && dados.error !== ""
+              ? dados.error
+              : "Não consegui responder agora. Tenta de novo daqui a pouco.";
+          renderizarBolha("erro", "", mensagemErro);
+        }
+      } catch (erroRede) {
+        renderizarBolha("erro", "", "Caiu a conexão. Confere a rede e manda de novo.");
+      } finally {
+        definirEnviando(false);
+      }
+    }
+
+    // Botoes de sugestao: preenchem o campo e focam nele (nao enviam
+    // sozinhos, para o guitarrista poder ajustar antes de mandar).
+    var sugestoes = document.querySelectorAll(".sugestao");
+    for (var i = 0; i < sugestoes.length; i++) {
+      sugestoes[i].addEventListener("click", function () {
+        campoTexto.value = this.getAttribute("data-comando");
+        ajustarAltura();
+        campoTexto.focus();
+      });
+    }
+
+    botaoEnviar.addEventListener("click", function () {
+      enviarMensagem();
+    });
+
+    campoTexto.addEventListener("keydown", function (evento) {
+      if (evento.key === "Enter" && !evento.shiftKey) {
+        evento.preventDefault();
+        enviarMensagem();
+      }
+    });
+
+    campoTexto.addEventListener("input", ajustarAltura);
+
+    campoTexto.focus();
+  </script>
+</body>
+</html>
